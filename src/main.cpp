@@ -46,18 +46,27 @@ CV70-74   Light2
 CV80-84   Light3
 */
 
+// Hardware pin definitions
+const uint8_t numberOfLights = 4;
+const pin_size_t pinLight[numberOfLights] = {PIN_PB0, PIN_PB1, PIN_PA3, PIN_PA4};
+const pin_size_t pinDCCInput = PIN_PB4;
+
+// Objects from AP_DCC_Library
 extern Dcc dcc;        // This object is instantiated in DCC_Library.cpp
 extern Loco locoCmd;   // To retrieve the data from loco commands (7 & 14 bit)
 extern CvAccess cvCmd; // To retrieve the data from pom and sm commands
 
+// CVs are cached in RAM and saved in EEPROM
 const uint8_t NumberOfCvsInCache = 100;
-uint8_t cvsCache[NumberOfCvsInCache]; // Local copy of all CVs in RAM
+uint8_t cvsCache[NumberOfCvsInCache]; // Local copy of CVs in RAM
 
+// CV number definitions
 const uint8_t CV1PrimaryAddress = 1;
 const uint8_t CV7ManufacturerVersionNumber = 7;
 const uint8_t CV8ManufacturerIDNumber = 8;
 const uint8_t CV29ModeControl = 29;
 
+// CVs related to light outputs. Each set is offset by 10
 const uint8_t CV50Light0Brightness = 50;
 const uint8_t CV51Light0ControlFunction = 51;
 const uint8_t CV52Light0DirectionSensitivity = 52;
@@ -82,19 +91,19 @@ const uint8_t CV82Light3DirectionSensitivity = 82;
 const uint8_t CV83Light3SpeedSensitivity = 83;
 const uint8_t CV84Light3Effect = 84;
 
-void loadAllCVsToRAM()
+void loadCVsFromEEPROM()
 {
     for (uint8_t i = 0; i < NumberOfCvsInCache; i++)
         cvsCache[i] = EEPROM.read(i);
 }
 
-void storeAllCVsToEEPROM()
+void storeCVsToEEPROM()
 {
     for (uint8_t i = 0; i < NumberOfCvsInCache; i++)
         EEPROM.write(i, cvsCache[i]);
 }
 
-void resetAllCVsToDefault()
+void resetCVsToDefault()
 {
     for (uint8_t i = 0; i < NumberOfCvsInCache; i++)
         cvsCache[i] = 0;
@@ -127,24 +136,51 @@ void resetAllCVsToDefault()
     cvsCache[CV83Light3SpeedSensitivity] = 0;
     cvsCache[CV84Light3Effect] = 0;
 
-    storeAllCVsToEEPROM();
+    storeCVsToEEPROM();
 }
 
-const uint8_t numberOfFcts = 28;
+// Store in fctStateCache[] the state (ON /OFF) of functions F0 to F28
+const uint8_t numberOfFcts = 29;
 bool fctStateCache[numberOfFcts];
 
 void updateFctsStateCache()
 {
     fctStateCache[0] = (bool)(locoCmd.F0F4 & 0b00010000);
-    Serial.print("fctStateCache[0] = ");
-    Serial.println(fctStateCache[0]);
     fctStateCache[1] = (bool)(locoCmd.F0F4 & 0b00000001);
     fctStateCache[2] = (bool)(locoCmd.F0F4 & 0b00000010);
     fctStateCache[3] = (bool)(locoCmd.F0F4 & 0b00000100);
     fctStateCache[4] = (bool)(locoCmd.F0F4 & 0b00001000);
+
+    fctStateCache[5] = (bool)(locoCmd.F5F8 & 0b00000001);
+    fctStateCache[6] = (bool)(locoCmd.F5F8 & 0b00000010);
+    fctStateCache[7] = (bool)(locoCmd.F5F8 & 0b00000100);
+    fctStateCache[8] = (bool)(locoCmd.F5F8 & 0b00001000);
+
+    fctStateCache[9] = (bool)(locoCmd.F9F12 & 0b00000001);
+    fctStateCache[10] = (bool)(locoCmd.F9F12 & 0b00000010);
+    fctStateCache[11] = (bool)(locoCmd.F9F12 & 0b00000100);
+    fctStateCache[12] = (bool)(locoCmd.F9F12 & 0b00001000);
+
+    fctStateCache[13] = (bool)(locoCmd.F13F20 & 0b00000001);
+    fctStateCache[14] = (bool)(locoCmd.F13F20 & 0b00000010);
+    fctStateCache[15] = (bool)(locoCmd.F13F20 & 0b00000100);
+    fctStateCache[16] = (bool)(locoCmd.F13F20 & 0b00001000);
+    fctStateCache[17] = (bool)(locoCmd.F13F20 & 0b00010000);
+    fctStateCache[18] = (bool)(locoCmd.F13F20 & 0b00100000);
+    fctStateCache[19] = (bool)(locoCmd.F13F20 & 0b01000000);
+    fctStateCache[20] = (bool)(locoCmd.F13F20 & 0b10000000);
+
+    fctStateCache[21] = (bool)(locoCmd.F21F28 & 0b00000001);
+    fctStateCache[22] = (bool)(locoCmd.F21F28 & 0b00000010);
+    fctStateCache[23] = (bool)(locoCmd.F21F28 & 0b00000100);
+    fctStateCache[24] = (bool)(locoCmd.F21F28 & 0b00001000);
+    fctStateCache[25] = (bool)(locoCmd.F21F28 & 0b00010000);
+    fctStateCache[26] = (bool)(locoCmd.F21F28 & 0b00100000);
+    fctStateCache[27] = (bool)(locoCmd.F21F28 & 0b01000000);
+    fctStateCache[28] = (bool)(locoCmd.F21F28 & 0b10000000);
 }
 
-const uint8_t numberOfLights = 4;
+// Store in lightStateCache[] the state (ON / OFF) of lights
 bool lightStateCache[numberOfLights];
 
 void updateLightsStateCache()
@@ -157,16 +193,13 @@ void updateLightsStateCache()
                    (cvsCache[CV52Light0DirectionSensitivity + lightNrOffset] == 0 || (cvsCache[CV52Light0DirectionSensitivity + lightNrOffset] == 1 && locoCmd.forward) || (cvsCache[CV52Light0DirectionSensitivity + lightNrOffset] == 2 && !locoCmd.forward)) &&
                    (cvsCache[CV53Light0SpeedSensitivity + lightNrOffset] == 0 || (cvsCache[CV53Light0SpeedSensitivity + lightNrOffset] == 1 && locoCmd.speed > 0)));
     }
-    Serial.print("lightStateCache[0] = ");
-    Serial.println(lightStateCache[0]);
 }
 
+// Period (in ms) of light flash
 const uint32_t strobeFlashPeriod = 150;
 const uint32_t rotatingFlashPeriod = 400;
 
-const pin_size_t pinLight[numberOfLights] = {PIN_PB0, PIN_PB1, PIN_PA3, PIN_PA4};
-const pin_size_t pinDCCInput = PIN_PB4;
-
+// Gamma table
 const uint8_t gamma[] = {
     0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
     0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1,
@@ -187,7 +220,7 @@ const uint8_t gamma[] = {
 
 uint8_t valueLight(uint8_t lightNr)
 {
-    uint32_t time;
+    uint32_t timeNow;
     uint8_t lightNrOffset = lightNr * 10;
     if (lightStateCache[lightNr])
     {
@@ -198,19 +231,19 @@ uint8_t valueLight(uint8_t lightNr)
             break;
 
         case 1: // Strobe flash
-            time = millis() % strobeFlashPeriod;
-            if (time < (strobeFlashPeriod / 12))
+            timeNow = millis() % strobeFlashPeriod;
+            if (timeNow < (strobeFlashPeriod / 12))
                 return (gamma[cvsCache[CV50Light0Brightness + lightNrOffset]]);
             else
                 return (0);
             break;
 
         case 2: // Rotating flash
-            time = millis() % rotatingFlashPeriod;
-            if (time < (rotatingFlashPeriod / 2))
-                return (gamma[(uint8_t)((2 * cvsCache[CV50Light0Brightness + lightNrOffset] * time) / rotatingFlashPeriod)]);
+            timeNow = millis() % rotatingFlashPeriod;
+            if (timeNow < (rotatingFlashPeriod / 2))
+                return (gamma[(uint8_t)((2 * cvsCache[CV50Light0Brightness + lightNrOffset] * timeNow) / rotatingFlashPeriod)]);
             else
-                return (gamma[(uint8_t)((2 * cvsCache[CV50Light0Brightness + lightNrOffset] * (rotatingFlashPeriod - time)) / rotatingFlashPeriod)]);
+                return (gamma[(uint8_t)((2 * cvsCache[CV50Light0Brightness + lightNrOffset] * (rotatingFlashPeriod - timeNow)) / rotatingFlashPeriod)]);
             break;
         }
     }
@@ -219,37 +252,20 @@ uint8_t valueLight(uint8_t lightNr)
 }
 
 // Define constants to differentiate between SM and PoM
-const uint8_t SM = 1;
-const uint8_t PoM = 2;
-
-void printBinary(const uint8_t value)
-{
-    Serial.print((value & 0b10000000) >> 7);
-    Serial.print((value & 0b01000000) >> 6);
-    Serial.print((value & 0b00100000) >> 5);
-    Serial.print((value & 0b00010000) >> 4);
-    Serial.print((value & 0b00001000) >> 3);
-    Serial.print((value & 0b00000100) >> 2);
-    Serial.print((value & 0b00000010) >> 1);
-    Serial.print(value & 0b00000001);
-}
+const uint8_t OPModeServiceMode = 1;
+const uint8_t OPModeProgramOnMain = 2;
 
 void cvOperation(const uint8_t op_mode)
 {
-    // SM:  op_mode = 1
-    // PoM: op_mode = 2
-    Serial.print("Received CV Number: ");
-    Serial.println(cvCmd.number);
-    Serial.print("Received CV Value: ");
+    Serial.print("Received CV number and value: ");
+    Serial.print(cvCmd.number);
+    Serial.print(" | ");
     Serial.println(cvCmd.value);
     // Ensure we stay within the CV array bounds
     if (cvCmd.number < sizeof(cvsCache))
     {
-        Serial.print("CV value stored in decoder = ");
-        Serial.print(cvsCache[cvCmd.number]);
-        Serial.print(" (");
-        printBinary(cvsCache[cvCmd.number]);
-        Serial.println(")");
+        Serial.print("CV value stored in decoder: ");
+        Serial.println(cvsCache[cvCmd.number]);
 
         switch (cvCmd.operation)
         {
@@ -257,8 +273,8 @@ void cvOperation(const uint8_t op_mode)
             if (cvsCache[cvCmd.number] == cvCmd.value)
             {
                 Serial.println("Verify Byte Command - Bytes are equal");
-                // In SM we send back a DCC-ACK signal, in PoM mode a railcom reply (not implemented)
-                if (op_mode == SM)
+                // In SM we send back a DCC-ACK signal
+                if (op_mode == OPModeServiceMode)
                     dcc.sendAck();
             }
             else
@@ -274,7 +290,7 @@ void cvOperation(const uint8_t op_mode)
 
             case CV8ManufacturerIDNumber:
                 if (cvCmd.value == 8)
-                    resetAllCVsToDefault();
+                    resetCVsToDefault();
                 break;
 
             default:
@@ -282,7 +298,7 @@ void cvOperation(const uint8_t op_mode)
                 EEPROM.write(cvCmd.number, cvCmd.value);
                 break;
             }
-            if (op_mode == SM)
+            if (op_mode == OPModeServiceMode)
                 dcc.sendAck();
             break;
 
@@ -297,7 +313,7 @@ void cvOperation(const uint8_t op_mode)
                 cvsCache[cvCmd.number] = cvCmd.writeBit(cvsCache[cvCmd.number]);
                 Serial.print(". New CV value = ");
                 Serial.println(cvsCache[cvCmd.number]);
-                if (op_mode == SM)
+                if (op_mode == OPModeServiceMode)
                     dcc.sendAck();
             }
             else
@@ -310,11 +326,11 @@ void cvOperation(const uint8_t op_mode)
                 if (cvCmd.verifyBit(cvsCache[cvCmd.number]))
                 {
                     Serial.print("Bits are equal");
-                    if (op_mode == SM)
+                    if (op_mode == OPModeServiceMode)
                         dcc.sendAck();
                 }
                 else
-                    Serial.print("Bits are unequal");
+                    Serial.print("Bits are not equal");
             }
             Serial.println();
             break;
@@ -332,22 +348,24 @@ void setup()
     for (uint8_t lightNr = 0; lightNr < numberOfLights; lightNr++)
         pinMode(pinLight[lightNr], OUTPUT);
 
+    // Serial TX used for debugging messages
     Serial.begin(115200);
-    delay(1000);
+    delay(100);
     Serial.println("Test AP_DCC_library - Loco commands");
 
     dcc.attach(pinDCCInput);
 
     if (EEPROM.read(CV8ManufacturerIDNumber) == 13)
-        loadAllCVsToRAM();
+        loadCVsFromEEPROM();
     else
-        resetAllCVsToDefault();
+        resetCVsToDefault();
 
     locoCmd.setMyAddress(cvsCache[CV1PrimaryAddress]);
 }
 
 void loop()
 {
+    // Process DCC commands
     if (dcc.input())
     {
         switch (dcc.cmdType)
@@ -395,12 +413,12 @@ void loop()
 
         case Dcc::MyPomCmd:
             Serial.println("Programming on Main command:");
-            cvOperation(PoM);
+            cvOperation(OPModeProgramOnMain);
             break;
 
         case Dcc::SmCmd:
             Serial.println("Service mode command:");
-            cvOperation(SM);
+            cvOperation(OPModeServiceMode);
             break;
 
         default:
@@ -408,6 +426,8 @@ void loop()
         }
     }
 
+    // Process the value of light outputs
+    // We use analogWrite() as all output pins support PWM
     for (uint8_t lightNr = 0; lightNr < numberOfLights; lightNr++)
         analogWrite(pinLight[lightNr], valueLight(lightNr));
 }
