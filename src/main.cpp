@@ -1,27 +1,30 @@
-#include <Arduino.h>
-#include <AP_DCC_library.h>
-#include <EEPROM.h>
+/*************************************************************************************************************\
+Mobile DCC decoder based on attiny1616 for the TMC400
 
-/*
+Core / libraries
+- megaTinyCore: https://github.com/SpenceKonde/megaTinyCore
+- AP_DCC_library: https://github.com/aikopras/AP_DCC_library
 
-- tinyMegaCore uses TCA for PWM with AnalogWrite()
-- See page 182 of data sheet, 20.3.3.4.3 Single-Slope PWM Generation
-- tinyMegaCore uses split-mode, to have up to six 8-bit PWM outputs (WO (Waveform Out) [0..5]).
-  See 20.3.3.6 Split Mode - Two 8-Bit Timer/Counters
-- From the table below, without using multiplex signals, PWM could be (for Attiny1616-MNR VQFN 20-pin)
-    * WO0 - PB0 - pin 14
-    * WO1 - PB1 - pin 13
-    * WO2 - PB2 - pin 12
-    * WO3 - PA3 - pin 2
-    * WO4 - PA4 - pin 5
-    * WO5 - PA5 - pin 6
-- From tinyMegaCore source code
-  #define digitalPinHasPWM(p)  ((p) == PIN_PA4 || (p) == PIN_PA5 || (p) == PIN_PB2 || (p) == PIN_PB1
-                             || (p) == PIN_PB0 || (p) == PIN_PA3)
-
+Hardware resources
+- megaTinyCore uses TCA0 for PWM with AnalogWrite()
+    - See page 182 of data sheet, 20.3.3.4.3 Single-Slope PWM Generation
+    - megaTinyCore uses split-mode, to have up to six 8-bit PWM outputs (WO (Waveform Out) [0..5]).
+    See 20.3.3.6 Split Mode - Two 8-Bit Timer/Counters
+    - From the table below, without using multiplex signals, PWM could be (for Attiny1616-MNR VQFN 20-pin)
+        * WO0 - PB0 - pin 14
+        * WO1 - PB1 - pin 13
+        * WO2 - PB2 - pin 12
+        * WO3 - PA3 - pin 2
+        * WO4 - PA4 - pin 5
+        * WO5 - PA5 - pin 6
+    - From megaTinyCore source code
+    #define digitalPinHasPWM(p)  ((p) == PIN_PA4 || (p) == PIN_PB5 || (p) == PIN_PB2 || (p) == PIN_PB1
+                                || (p) == PIN_PB0 || (p) == PIN_PA3)
+- AP_DCC_Library
+    - TCB0 is used by the library
+    - In addition, a free to choose interrupt pin (dccpin) is required for the DCC input signal
 
 CV Map
-
 CV1     Primary Address
 CV7     Manufacturer Version Number
 CV8     Manufacturer ID Number
@@ -44,11 +47,17 @@ CV54    Light0 Effect
 CV60-64   Light1
 CV70-74   Light2
 CV80-84   Light3
-*/
+\*************************************************************************************************************/
+
+#include <Arduino.h>
+#include <AP_DCC_library.h>
+#include <EEPROM.h>
+
+#define DEBUG
 
 // Hardware pin definitions
 const uint8_t numberOfLights = 4;
-const pin_size_t pinLight[numberOfLights] = {PIN_PB0, PIN_PB1, PIN_PA3, PIN_PA4};
+const pin_size_t pinLight[numberOfLights] = {PIN_PB0, PIN_PB1, PIN_PB2, PIN_PA5};
 const pin_size_t pinDCCInput = PIN_PB4;
 
 // Objects from AP_DCC_Library
@@ -257,32 +266,44 @@ const uint8_t OPModeProgramOnMain = 2;
 
 void cvOperation(const uint8_t op_mode)
 {
+#ifdef DEBUG
     Serial.print("Received CV number and value: ");
     Serial.print(cvCmd.number);
     Serial.print(" | ");
     Serial.println(cvCmd.value);
+#endif
     // Ensure we stay within the CV array bounds
     if (cvCmd.number < sizeof(cvsCache))
     {
+#ifdef DEBUG
         Serial.print("CV value stored in decoder: ");
         Serial.println(cvsCache[cvCmd.number]);
+#endif
 
         switch (cvCmd.operation)
         {
         case CvAccess::verifyByte:
             if (cvsCache[cvCmd.number] == cvCmd.value)
             {
+#ifdef DEBUG
                 Serial.println("Verify Byte Command - Bytes are equal");
+#endif
                 // In SM we send back a DCC-ACK signal
                 if (op_mode == OPModeServiceMode)
                     dcc.sendAck();
             }
             else
+            {
+#ifdef DEBUG
                 Serial.println("Verify Byte Command - Bytes are unequal");
+#endif
+            }
             break;
 
         case CvAccess::writeByte:
+#ifdef DEBUG
             Serial.println("Write Byte Command");
+#endif
             switch (cvCmd.number)
             {
             case CV7ManufacturerVersionNumber:
@@ -305,34 +326,46 @@ void cvOperation(const uint8_t op_mode)
         case CvAccess::bitManipulation:
             if (cvCmd.writecmd)
             {
-                Serial.print("Bit Manupulation - Write Command");
+#ifdef DEBUG
+                Serial.print("Bit Manipulation - Write Command");
                 Serial.print(", Bitposition = ");
                 Serial.print(cvCmd.bitposition);
                 Serial.print(", Bitvalue = ");
                 Serial.println(cvCmd.bitvalue);
-                cvsCache[cvCmd.number] = cvCmd.writeBit(cvsCache[cvCmd.number]);
                 Serial.print(". New CV value = ");
                 Serial.println(cvsCache[cvCmd.number]);
+#endif
+                cvsCache[cvCmd.number] = cvCmd.writeBit(cvsCache[cvCmd.number]);
                 if (op_mode == OPModeServiceMode)
                     dcc.sendAck();
             }
             else
             { // verify bit
+#ifdef DEBUG
                 Serial.print("Bit Manipulation - Verify Command");
                 Serial.print(", Bitposition = ");
                 Serial.print(cvCmd.bitposition);
                 Serial.print(", Bitvalue = ");
                 Serial.println(cvCmd.bitvalue);
+#endif
                 if (cvCmd.verifyBit(cvsCache[cvCmd.number]))
                 {
+#ifdef DEBUG
                     Serial.print("Bits are equal");
+#endif
                     if (op_mode == OPModeServiceMode)
                         dcc.sendAck();
                 }
                 else
+                {
+#ifdef DEBUG
                     Serial.print("Bits are not equal");
+#endif
+                }
             }
+#ifdef DEBUG
             Serial.println();
+#endif
             break;
 
         default:
@@ -348,10 +381,14 @@ void setup()
     for (uint8_t lightNr = 0; lightNr < numberOfLights; lightNr++)
         pinMode(pinLight[lightNr], OUTPUT);
 
+#ifdef DEBUG
     // Serial TX used for debugging messages
+    // Two mapping options for Serial are PB2, PB3, PB1, PB0 (default) and PA1, PA2, PA3, PA4 for TX, RX, XCK, XDIR.
+    Serial.swap();          // Use the second set of serial pins. TX is on PA1
     Serial.begin(115200);
     delay(100);
     Serial.println("Test AP_DCC_library - Loco commands");
+#endif
 
     dcc.attach(pinDCCInput);
 
@@ -371,7 +408,9 @@ void loop()
         switch (dcc.cmdType)
         {
         case Dcc::ResetCmd:
+#ifdef DEBUG
             Serial.println("Reset command (all engines stop)");
+#endif
             break;
 
         case Dcc::MyLocoSpeedCmd:
@@ -383,13 +422,14 @@ void loop()
             updateFctsStateCache();
             updateLightsStateCache();
 
+#ifdef DEBUG
             Serial.print("Loco speed: ");
             Serial.print(locoCmd.speed);
             Serial.print(" | Direction: ");
             if (locoCmd.forward)
-                Serial.println("Forward");
+                Serial.print("Forward | ");
             else
-                Serial.println("Reverse");
+                Serial.print("Reverse | ");
 
             Serial.print("F0-F4: ");
             Serial.print(locoCmd.F0F4);
@@ -405,19 +445,26 @@ void loop()
 
             Serial.print(" | F21-F28: ");
             Serial.println(locoCmd.F21F28);
+#endif
             break;
 
         case Dcc::MyEmergencyStopCmd:
+#ifdef DEBUG
             Serial.println("Emergency stop command for this loco");
+#endif
             break;
 
         case Dcc::MyPomCmd:
+#ifdef DEBUG
             Serial.println("Programming on Main command:");
+#endif
             cvOperation(OPModeProgramOnMain);
             break;
 
         case Dcc::SmCmd:
+#ifdef DEBUG
             Serial.println("Service mode command:");
+#endif
             cvOperation(OPModeServiceMode);
             break;
 
