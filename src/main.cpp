@@ -53,7 +53,8 @@ CV80-84   Light3
 #include <AP_DCC_library.h>
 #include <EEPROM.h>
 
-#define DEBUG
+// Uncomment to send debugging messages to the serial line
+//#define DEBUG
 
 // Hardware pin definitions
 const uint8_t numberOfLights = 4;
@@ -206,7 +207,7 @@ void updateLightsStateCache()
 
 // Period (in ms) of light flash
 const uint32_t strobeFlashPeriod = 150;
-const uint32_t rotatingFlashPeriod = 400;
+const uint32_t rotatingFlashPeriod = 600;
 
 // Gamma table
 const uint8_t gamma[] = {
