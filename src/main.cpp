@@ -25,8 +25,11 @@ Hardware resources
     - On the attiny1616, millis() and micros() use TCD0
 
 - EEPROM
-    - NmraDcc uses the EEPROM to store CVs
     - attiny 1616 EEPROM size is 256 bytes
+    - NmraDcc uses the EEPROM to store CVs. CVs are stored at the location corresponding to the CV number
+      (i.e., CV29 is stored at location 29)
+    - We will also use location 255 to store the status of the functions (F0 to F4). The goal is to have the lights
+      in the correct state at power on, before the decoder receives any DCC packet setting these functions
 
 CV Map
 CV1     Primary Address
@@ -51,13 +54,20 @@ CV54    Light0 Effect
 CV60-64   Light1
 CV70-74   Light2
 CV80-84   Light3
+CV90-94   Light4
 \*************************************************************************************************************/
 
 #include <Arduino.h>
 #include <NmraDcc.h>
+#include <EEPROM.h>
 
 // Uncomment to send debugging messages to the serial line
 #define DEBUG
+
+// Versioning
+const uint8_t versionIdMajor = 1;
+const uint8_t versionIdMinor = 2;
+const uint8_t versionId = versionIdMajor << 4 | versionIdMinor;
 
 // Hardware pin definitions
 const uint8_t numberOfLights = 5;
@@ -77,9 +87,10 @@ DCC_DIRECTION currentDirection = DCC_DIR_FWD;       // Either DCC_DIR_FWD or DCC
 DCC_SPEED_STEPS currentSpeedSteps = SPEED_STEP_128; // Either SPEED_STEP_28 or SPEED_STEP_128
 uint8_t currentFuncState = 0;
 
-// fctsCache[] stores the state (ON/OFF) of functions F0 to F4
+// fctsCache[] holds the current state (ON/OFF) of functions F0 to F4
 const uint8_t numberOfFctsInCache = 5;
 bool fctsCache[numberOfFctsInCache];
+const uint16_t fctsEepromAddress = 255;
 
 // CV number definitions
 const uint8_t CV0Check = 0;
@@ -270,6 +281,8 @@ void notifyDccSpeed(uint16_t Addr, DCC_ADDR_TYPE AddrType, uint8_t Speed, DCC_DI
 // This callback function is called whenever we receive a DCC Function packet for our address
 void notifyDccFunc(uint16_t Addr, DCC_ADDR_TYPE AddrType, FN_GROUP FuncGrp, uint8_t FuncState)
 {
+    // Check that the DCC packet is for functions 0 to 4 (the only functions we use)
+    // Check that one of the functions has changed
     if (FuncGrp == FN_0_4 && currentFuncState != FuncState)
     {
 #ifdef DEBUG
@@ -285,13 +298,25 @@ void notifyDccFunc(uint16_t Addr, DCC_ADDR_TYPE AddrType, FN_GROUP FuncGrp, uint
         fctsCache[3] = (bool)(FuncState & FN_BIT_03);
         fctsCache[4] = (bool)(FuncState & FN_BIT_04);
         updateLightCache();
+        EEPROM.write(fctsEepromAddress, FuncState);
     }
 }
 
-void resetFctsToDefault()
+// void resetFctsToDefault()
+// {
+//     for (uint8_t i = 0; i < numberOfFctsInCache; i++)
+//         fctsCache[i] = 0;
+// }
+
+void readFctsToCache()
 {
-    for (uint8_t i = 0; i < numberOfFctsInCache; i++)
-        fctsCache[i] = 0;
+    uint8_t FuncState = EEPROM.read(fctsEepromAddress);
+    currentFuncState = FuncState;
+    fctsCache[0] = (bool)(FuncState & FN_BIT_00);
+    fctsCache[1] = (bool)(FuncState & FN_BIT_01);
+    fctsCache[2] = (bool)(FuncState & FN_BIT_02);
+    fctsCache[3] = (bool)(FuncState & FN_BIT_03);
+    fctsCache[4] = (bool)(FuncState & FN_BIT_04);
 }
 
 // Period (in ms) of light flash
@@ -384,13 +409,14 @@ void setup()
     Serial.println("-- Starting tiny DCC decoder --");
 #endif
 
-    resetFctsToDefault();
+    //resetFctsToDefault();
+    readFctsToCache();
 
     // Initialize the NmraDcc library
     // void NmraDcc::pin (uint8_t ExtIntPinNum, uint8_t EnablePullup)
     // void NmraDcc::init (uint8_t ManufacturerId, uint8_t VersionId, uint8_t Flags, uint8_t OpsModeAddressBaseCV)
     Dcc.pin(pinDCCInput, false);
-    Dcc.init(MAN_ID_DIY, 10, FLAGS_MY_ADDRESS_ONLY | FLAGS_AUTO_FACTORY_DEFAULT, 0);
+    Dcc.init(MAN_ID_DIY, versionId, FLAGS_MY_ADDRESS_ONLY | FLAGS_AUTO_FACTORY_DEFAULT, 0);
 
     // Uncomment to force CV Reset to Factory Defaults
     //notifyCVResetFactoryDefault();
