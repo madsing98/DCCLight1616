@@ -21,9 +21,11 @@ Hardware resources
     #define digitalPinHasPWM(p)  ((p) == PIN_PA4 || (p) == PIN_PB5 || (p) == PIN_PB2 || (p) == PIN_PB1
                                 || (p) == PIN_PB0 || (p) == PIN_PA3)
 - NmraDcc
-    - ???????????????????????
+    - Uses the INT0/1 Hardware Interrupt and micros() ONLY
+    - On the attiny1616, millis() and micros() use TCD0
 
 - EEPROM
+    - NmraDcc uses the EEPROM to store CVs
     - attiny 1616 EEPROM size is 256 bytes
 
 CV Map
@@ -63,21 +65,20 @@ const pin_size_t pinLight[numberOfLights] = {PIN_PB0, PIN_PB1, PIN_PB2, PIN_PA5}
 const pin_size_t pinDCCInput = PIN_PB4;
 const pin_size_t pinACKOutput = PIN_PA3;
 
+bool lightCache[numberOfLights];
+
 // Objects from NmraDcc
 NmraDcc Dcc;
 
-uint8_t currentSpeed;
-DCC_DIRECTION currentDirection;
-DCC_SPEED_STEPS currentSpeedSteps;
-bool lightCache[numberOfLights];
+// Current value of loco speed, direction and speed steps
+uint8_t currentSpeed = 0;
+DCC_DIRECTION currentDirection = DCC_DIR_FWD; // Either DCC_DIR_FWD or DCC_DIR_REV
+DCC_SPEED_STEPS currentSpeedSteps = SPEED_STEP_128;     // Either SPEED_STEP_28 or SPEED_STEP_128
+uint8_t currentFuncState = 0;
 
-// Store in fctsCache[] the state (ON /OFF) of functions F0 to F4
+// fctsCache[] stores the state (ON/OFF) of functions F0 to F4
 const uint8_t numberOfFctsInCache = 5;
 bool fctsCache[numberOfFctsInCache];
-
-// CVs are cached in RAM
-const uint8_t numberOfCvsInCache = 100;
-uint8_t cvsCache[numberOfCvsInCache]; // Local copy of CVs in RAM
 
 // CV number definitions
 const uint8_t CV0Check = 0;
@@ -109,16 +110,23 @@ const uint8_t CV80Light3Brightness = 80;
 const uint8_t CV81Light3ControlFunction = 81;
 const uint8_t CV82Light3DirectionSensitivity = 82;
 const uint8_t CV83Light3SpeedSensitivity = 83;
-const uint8_t CV84Light3Effect = 84;
+const uint8_t CV84Light3Effect = 84; // CV with the highest number
 
-// Structure for CV Values Table
+// cvsCache[] stores the CVs (in RAM, for quickest access)
+// The indexes of the array are the CV numbers
+// cvsCache[cvNumber] = cvValue
+const uint8_t numberOfCvsInCache = CV84Light3Effect + 1; // CV84Light3Effect is the CV with the highest number
+uint8_t cvsCache[numberOfCvsInCache];
+
+// Structure for CV Values Table and default CV Values table as required by NmraDcc for storing default values
+uint8_t FactoryDefaultCVIndex = 0;
+
 struct CVPair
 {
     uint16_t CV;
     uint8_t Value;
 };
 
-// Default CV Values Table as required by NmraDcc
 const CVPair FactoryDefaultCVs[] =
     {
         {CV1PrimaryAddress, 3},
@@ -149,7 +157,7 @@ const CVPair FactoryDefaultCVs[] =
         {CV83Light3SpeedSensitivity, 0},
         {CV84Light3Effect, 0}};
 
-// This callback function is called when a CV Value changes so we can update cvsCache
+// This callback function is called when a CV Value changes so we can update cvsCache[]
 void notifyCVChange(uint16_t CV, uint8_t Value)
 {
 #ifdef DEBUG
@@ -163,18 +171,19 @@ void notifyCVChange(uint16_t CV, uint8_t Value)
         cvsCache[CV] = Value;
 }
 
-uint8_t FactoryDefaultCVIndex = 0;
-
+// This callback function is called when the CVs must be reset to their factory defaults
+// Make FactoryDefaultCVIndex non-zero and equal to the number of CVs to be reset
+// to flag to the loop() function that a reset to factory defaults needs to be done
 void notifyCVResetFactoryDefault()
 {
-// Make FactoryDefaultCVIndex non-zero and equal to the number of CVs to be reset
-// to flag to the loop() function that a reset to Factory Defaults needs to be done
 #ifdef DEBUG
     Serial.println("notifyCVResetFactoryDefault");
 #endif
     FactoryDefaultCVIndex = sizeof(FactoryDefaultCVs) / sizeof(CVPair);
 };
 
+// Function called at setup time to load all CVs to the array cvsCache[] in memory
+// Only the CVs used (i.e. listed in FactoryDefaultCVs) are read
 void readCvsToCache()
 {
     for (uint8_t i = 0; i < sizeof(FactoryDefaultCVs) / sizeof(CVPair); i++)
@@ -194,65 +203,74 @@ void readCvsToCache()
 #endif
 }
 
-// Compute and store in lightCache[] the state (ON / OFF) of the lights
+// Compute and store in lightCache[] the state (ON/OFF) of the lights
 // To be called whenever one of the underlying parameters (CVs, Fcts, speed, direction) changes
 void updateLightCache()
 {
+#ifdef DEBUG
+    Serial.print("updateLightCache: ");
+#endif
     for (uint8_t lightNr = 0; lightNr < numberOfLights; lightNr++)
     {
         uint8_t lightNrOffset = lightNr * 10;
+        if(cvsCache[CV51Light0ControlFunction + lightNrOffset] > (numberOfFctsInCache - 1))
+            cvsCache[CV51Light0ControlFunction + lightNrOffset] = 31;
         lightCache[lightNr] =
             (bool)((cvsCache[CV51Light0ControlFunction + lightNrOffset] == 31 || fctsCache[cvsCache[CV51Light0ControlFunction + lightNrOffset]]) &&
                    (cvsCache[CV52Light0DirectionSensitivity + lightNrOffset] == 0 || (cvsCache[CV52Light0DirectionSensitivity + lightNrOffset] == 1 && currentDirection == DCC_DIR_FWD) || (cvsCache[CV52Light0DirectionSensitivity + lightNrOffset] == 2 && currentDirection == DCC_DIR_REV)) &&
-                   (cvsCache[CV53Light0SpeedSensitivity + lightNrOffset] == 0 || (cvsCache[CV53Light0SpeedSensitivity + lightNrOffset] == 1 && currentSpeed > 0)));
+                   (cvsCache[CV53Light0SpeedSensitivity + lightNrOffset] == 0 || (cvsCache[CV53Light0SpeedSensitivity + lightNrOffset] == 1 && currentSpeed > 1)));
+#ifdef DEBUG
+        Serial.print(lightNr);
+        Serial.print(" = ");
+        Serial.print(lightCache[lightNr]);
+        Serial.print(" | ");
+#endif
     }
+#ifdef DEBUG
+    Serial.println();
+#endif
 }
 
-// This callback function is called whenever we receive a DCC Speed packet for our address
+// This callback function is called whenever we receive a DCC speed packet for our address
 void notifyDccSpeed(uint16_t Addr, DCC_ADDR_TYPE AddrType, uint8_t Speed, DCC_DIRECTION Dir, DCC_SPEED_STEPS SpeedSteps)
 {
-#ifdef DEBUG
     if (currentDirection != Dir || currentSpeed != Speed || currentSpeedSteps != SpeedSteps)
     {
+#ifdef DEBUG
         Serial.print("notifyDccSpeed: Speed = ");
         Serial.print(Speed, DEC);
         Serial.print(" | Steps = ");
         Serial.print(SpeedSteps, DEC);
         Serial.print(" | Dir = ");
         Serial.println((Dir == DCC_DIR_FWD) ? "Fwd" : "Rev");
-    }
 #endif
 
-    currentDirection = Dir;
-    currentSpeed = Speed;
-    currentSpeedSteps = SpeedSteps;
-    updateLightCache();
+        currentDirection = Dir;
+        currentSpeed = Speed;
+        currentSpeedSteps = SpeedSteps;
+        updateLightCache();
+    }
 };
 
 // This callback function is called whenever we receive a DCC Function packet for our address
 void notifyDccFunc(uint16_t Addr, DCC_ADDR_TYPE AddrType, FN_GROUP FuncGrp, uint8_t FuncState)
 {
-#ifdef DEBUG
-    if (fctsCache[0] != (bool)(FuncState & FN_BIT_00) || fctsCache[1] != (bool)(FuncState & FN_BIT_01)
-        || fctsCache[2] != (bool)(FuncState & FN_BIT_02) || fctsCache[3] != (bool)(FuncState & FN_BIT_03)
-        || fctsCache[4] != (bool)(FuncState & FN_BIT_04))
+    if (FuncGrp == FN_0_4 && currentFuncState != FuncState)
     {
+#ifdef DEBUG
         Serial.print("Function Group: ");
         Serial.print(FuncGrp);
         Serial.print(" | State = 0b");
         Serial.println(FuncState, BIN);
-    }
 #endif
-
-    if (FuncGrp == FN_0_4)
-    {
+        currentFuncState = FuncState;
         fctsCache[0] = (bool)(FuncState & FN_BIT_00);
         fctsCache[1] = (bool)(FuncState & FN_BIT_01);
         fctsCache[2] = (bool)(FuncState & FN_BIT_02);
         fctsCache[3] = (bool)(FuncState & FN_BIT_03);
         fctsCache[4] = (bool)(FuncState & FN_BIT_04);
+        updateLightCache();
     }
-    updateLightCache();
 }
 
 void resetFctsToDefault()
@@ -341,37 +359,30 @@ void setup()
     Serial.println("-- Starting tiny DCC decoder --");
 #endif
 
+    resetFctsToDefault();
+
+    // Initialize the NmraDcc library
+    // void NmraDcc::pin (uint8_t ExtIntPinNum, uint8_t EnablePullup)
+    // void NmraDcc::init (uint8_t ManufacturerId, uint8_t VersionId, uint8_t Flags, uint8_t OpsModeAddressBaseCV)
     Dcc.pin(pinDCCInput, false);
     Dcc.init(MAN_ID_DIY, 10, FLAGS_MY_ADDRESS_ONLY | FLAGS_AUTO_FACTORY_DEFAULT, 0);
 
     // Uncomment to force CV Reset to Factory Defaults
     // notifyCVResetFactoryDefault();
 
+    // Set light pins and DCC ACK pin to outputs
     for (uint8_t lightNr = 0; lightNr < numberOfLights; lightNr++)
         pinMode(pinLight[lightNr], OUTPUT);
 
     pinMode(pinACKOutput, OUTPUT);
 
-    resetFctsToDefault();
     readCvsToCache();
     updateLightCache();
 }
 
-#ifdef DEBUG
-uint16_t loopHi, loopNr = 0;
-#endif
-
 void loop()
 {
-#ifdef DEBUG
-    if (loopNr++ == 40000)
-    {
-        loopNr = 0;
-        Serial.print("Loop ");
-        Serial.println(loopHi++);
-    }
-#endif
-
+    // Process DCC packets
     Dcc.process();
 
     // Process the value of light outputs
