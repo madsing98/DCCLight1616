@@ -26,6 +26,9 @@ Hardware resources
     - TBC: The library selects "sup_isr_Nano_Every.h", which does not make use of the Event system of the CPU,
       althoug the attiny1616 has one.
 
+- EEPROM
+    - attiny 1616 EEPROM size is 256 bytes
+
 CV Map
 CV1     Primary Address
 CV7     Manufacturer Version Number
@@ -69,10 +72,11 @@ extern Loco locoCmd;   // To retrieve the data from loco commands (7 & 14 bit)
 extern CvAccess cvCmd; // To retrieve the data from pom and sm commands
 
 // CVs are cached in RAM and saved in EEPROM
-const uint8_t NumberOfCvsInCache = 100;
-uint8_t cvsCache[NumberOfCvsInCache]; // Local copy of CVs in RAM
+const uint8_t numberOfCvsInCache = 100;
+uint8_t cvsCache[numberOfCvsInCache]; // Local copy of CVs in RAM
 
 // CV number definitions
+const uint8_t CV0Check = 0;
 const uint8_t CV1PrimaryAddress = 1;
 const uint8_t CV7ManufacturerVersionNumber = 7;
 const uint8_t CV8ManufacturerIDNumber = 8;
@@ -103,23 +107,38 @@ const uint8_t CV82Light3DirectionSensitivity = 82;
 const uint8_t CV83Light3SpeedSensitivity = 83;
 const uint8_t CV84Light3Effect = 84;
 
+#ifdef DEBUG
+void printCVsCache()
+{
+    Serial.print("CVs:");
+    for (uint8_t i = 0; i < numberOfCvsInCache; i++)
+    {
+        cvsCache[i] = EEPROM.read(i);
+        Serial.print(cvsCache[i]);
+        Serial.print(" | ");
+    }
+    Serial.println();
+}
+#endif
+
 void loadCVsFromEEPROM()
 {
-    for (uint8_t i = 0; i < NumberOfCvsInCache; i++)
+    for (uint8_t i = 0; i < numberOfCvsInCache; i++)
         cvsCache[i] = EEPROM.read(i);
 }
 
 void storeCVsToEEPROM()
 {
-    for (uint8_t i = 0; i < NumberOfCvsInCache; i++)
+    for (uint8_t i = 0; i < numberOfCvsInCache; i++)
         EEPROM.write(i, cvsCache[i]);
 }
 
 void resetCVsToDefault()
 {
-    for (uint8_t i = 0; i < NumberOfCvsInCache; i++)
+    for (uint8_t i = 0; i < numberOfCvsInCache; i++)
         cvsCache[i] = 0;
 
+    cvsCache[CV0Check] = 0xE7;
     cvsCache[CV1PrimaryAddress] = 3;
     cvsCache[CV7ManufacturerVersionNumber] = 1;
     cvsCache[CV8ManufacturerIDNumber] = 13;
@@ -151,45 +170,81 @@ void resetCVsToDefault()
     storeCVsToEEPROM();
 }
 
-// Store in fctStateCache[] the state (ON /OFF) of functions F0 to F28
-const uint8_t numberOfFcts = 29;
-bool fctStateCache[numberOfFcts];
+// Store in fctsCache[] the state (ON /OFF) of functions F0 to F28
+const uint8_t numberOfFctsInCache = 29;
+bool fctsCache[numberOfFctsInCache];
+const uint8_t offsetofFctsInEEPROM = numberOfCvsInCache;
 
-void updateFctsStateCache()
+#ifdef DEBUG
+void printFctsCache()
 {
-    fctStateCache[0] = (bool)(locoCmd.F0F4 & 0b00010000);
-    fctStateCache[1] = (bool)(locoCmd.F0F4 & 0b00000001);
-    fctStateCache[2] = (bool)(locoCmd.F0F4 & 0b00000010);
-    fctStateCache[3] = (bool)(locoCmd.F0F4 & 0b00000100);
-    fctStateCache[4] = (bool)(locoCmd.F0F4 & 0b00001000);
+    Serial.print("FCTs: ");
+    for (uint8_t i = 0; i < numberOfFctsInCache; i++)
+    {
+        fctsCache[i] = EEPROM.read(offsetofFctsInEEPROM + i);
+        Serial.print(fctsCache[i]);
+        Serial.print(" | ");
+    }
+    Serial.println();
+}
+#endif
 
-    fctStateCache[5] = (bool)(locoCmd.F5F8 & 0b00000001);
-    fctStateCache[6] = (bool)(locoCmd.F5F8 & 0b00000010);
-    fctStateCache[7] = (bool)(locoCmd.F5F8 & 0b00000100);
-    fctStateCache[8] = (bool)(locoCmd.F5F8 & 0b00001000);
+void loadFctsFromEEPROM()
+{
+    for (uint8_t i = 0; i < numberOfFctsInCache; i++)
+        fctsCache[i] = EEPROM.read(offsetofFctsInEEPROM + i);
+}
 
-    fctStateCache[9] = (bool)(locoCmd.F9F12 & 0b00000001);
-    fctStateCache[10] = (bool)(locoCmd.F9F12 & 0b00000010);
-    fctStateCache[11] = (bool)(locoCmd.F9F12 & 0b00000100);
-    fctStateCache[12] = (bool)(locoCmd.F9F12 & 0b00001000);
+void storeFctsToEEPROM()
+{
+    for (uint8_t i = 0; i < numberOfFctsInCache; i++)
+        EEPROM.write(offsetofFctsInEEPROM + i, fctsCache[i]);
+}
 
-    fctStateCache[13] = (bool)(locoCmd.F13F20 & 0b00000001);
-    fctStateCache[14] = (bool)(locoCmd.F13F20 & 0b00000010);
-    fctStateCache[15] = (bool)(locoCmd.F13F20 & 0b00000100);
-    fctStateCache[16] = (bool)(locoCmd.F13F20 & 0b00001000);
-    fctStateCache[17] = (bool)(locoCmd.F13F20 & 0b00010000);
-    fctStateCache[18] = (bool)(locoCmd.F13F20 & 0b00100000);
-    fctStateCache[19] = (bool)(locoCmd.F13F20 & 0b01000000);
-    fctStateCache[20] = (bool)(locoCmd.F13F20 & 0b10000000);
+void resetFctsToDefault()
+{
+    for (uint8_t i = 0; i < numberOfFctsInCache; i++)
+        fctsCache[i] = 1;
+    storeFctsToEEPROM();
+}
 
-    fctStateCache[21] = (bool)(locoCmd.F21F28 & 0b00000001);
-    fctStateCache[22] = (bool)(locoCmd.F21F28 & 0b00000010);
-    fctStateCache[23] = (bool)(locoCmd.F21F28 & 0b00000100);
-    fctStateCache[24] = (bool)(locoCmd.F21F28 & 0b00001000);
-    fctStateCache[25] = (bool)(locoCmd.F21F28 & 0b00010000);
-    fctStateCache[26] = (bool)(locoCmd.F21F28 & 0b00100000);
-    fctStateCache[27] = (bool)(locoCmd.F21F28 & 0b01000000);
-    fctStateCache[28] = (bool)(locoCmd.F21F28 & 0b10000000);
+void updateFctsCache()
+{
+    fctsCache[0] = (bool)(locoCmd.F0F4 & 0b00010000);
+    fctsCache[1] = (bool)(locoCmd.F0F4 & 0b00000001);
+    fctsCache[2] = (bool)(locoCmd.F0F4 & 0b00000010);
+    fctsCache[3] = (bool)(locoCmd.F0F4 & 0b00000100);
+    fctsCache[4] = (bool)(locoCmd.F0F4 & 0b00001000);
+
+    fctsCache[5] = (bool)(locoCmd.F5F8 & 0b00000001);
+    fctsCache[6] = (bool)(locoCmd.F5F8 & 0b00000010);
+    fctsCache[7] = (bool)(locoCmd.F5F8 & 0b00000100);
+    fctsCache[8] = (bool)(locoCmd.F5F8 & 0b00001000);
+
+    fctsCache[9] = (bool)(locoCmd.F9F12 & 0b00000001);
+    fctsCache[10] = (bool)(locoCmd.F9F12 & 0b00000010);
+    fctsCache[11] = (bool)(locoCmd.F9F12 & 0b00000100);
+    fctsCache[12] = (bool)(locoCmd.F9F12 & 0b00001000);
+
+    fctsCache[13] = (bool)(locoCmd.F13F20 & 0b00000001);
+    fctsCache[14] = (bool)(locoCmd.F13F20 & 0b00000010);
+    fctsCache[15] = (bool)(locoCmd.F13F20 & 0b00000100);
+    fctsCache[16] = (bool)(locoCmd.F13F20 & 0b00001000);
+    fctsCache[17] = (bool)(locoCmd.F13F20 & 0b00010000);
+    fctsCache[18] = (bool)(locoCmd.F13F20 & 0b00100000);
+    fctsCache[19] = (bool)(locoCmd.F13F20 & 0b01000000);
+    fctsCache[20] = (bool)(locoCmd.F13F20 & 0b10000000);
+
+    fctsCache[21] = (bool)(locoCmd.F21F28 & 0b00000001);
+    fctsCache[22] = (bool)(locoCmd.F21F28 & 0b00000010);
+    fctsCache[23] = (bool)(locoCmd.F21F28 & 0b00000100);
+    fctsCache[24] = (bool)(locoCmd.F21F28 & 0b00001000);
+    fctsCache[25] = (bool)(locoCmd.F21F28 & 0b00010000);
+    fctsCache[26] = (bool)(locoCmd.F21F28 & 0b00100000);
+    fctsCache[27] = (bool)(locoCmd.F21F28 & 0b01000000);
+    fctsCache[28] = (bool)(locoCmd.F21F28 & 0b10000000);
+
+    storeFctsToEEPROM();
 }
 
 // Store in lightStateCache[] the state (ON / OFF) of lights
@@ -201,7 +256,7 @@ void updateLightsStateCache()
     {
         uint8_t lightNrOffset = lightNr * 10;
         lightStateCache[lightNr] =
-            (bool)((cvsCache[CV51Light0ControlFunction + lightNrOffset] == 31 || fctStateCache[cvsCache[CV51Light0ControlFunction + lightNrOffset]]) &&
+            (bool)((cvsCache[CV51Light0ControlFunction + lightNrOffset] == 31 || fctsCache[cvsCache[CV51Light0ControlFunction + lightNrOffset]]) &&
                    (cvsCache[CV52Light0DirectionSensitivity + lightNrOffset] == 0 || (cvsCache[CV52Light0DirectionSensitivity + lightNrOffset] == 1 && locoCmd.forward) || (cvsCache[CV52Light0DirectionSensitivity + lightNrOffset] == 2 && !locoCmd.forward)) &&
                    (cvsCache[CV53Light0SpeedSensitivity + lightNrOffset] == 0 || (cvsCache[CV53Light0SpeedSensitivity + lightNrOffset] == 1 && locoCmd.speed > 0)));
     }
@@ -314,7 +369,10 @@ void cvOperation(const uint8_t op_mode)
 
             case CV8ManufacturerIDNumber:
                 if (cvCmd.value == 8)
+                {
                     resetCVsToDefault();
+                    resetFctsToDefault();
+                }
                 break;
 
             default:
@@ -374,40 +432,65 @@ void cvOperation(const uint8_t op_mode)
         default:
             break;
         }
-        updateFctsStateCache();
+        updateFctsCache();
         updateLightsStateCache();
     }
 }
 
 void setup()
 {
+    dcc.attach(pinDCCInput);
+    pinMode(pinDCCInput, INPUT); // Overrides the "pinMode(pinDCCInput, INPUT_PULLUP)" of the AP_DCC_Library as I don't want a pullup on that input
+
     for (uint8_t lightNr = 0; lightNr < numberOfLights; lightNr++)
         pinMode(pinLight[lightNr], OUTPUT);
 
 #ifdef DEBUG
     // Serial TX used for debugging messages
     // Two mapping options for Serial are PB2, PB3, PB1, PB0 (default) and PA1, PA2, PA3, PA4 for TX, RX, XCK, XDIR.
-    Serial.swap();          // Use the second set of serial pins. TX is on PA1
+    Serial.swap(); // Use the second set of serial pins. TX is on PA1
     Serial.begin(115200);
-    delay(100);
-    Serial.println("-- Tiny DCC Decoder --");
+    Serial.println("-- Starting tiny DCC Decoder --");
 #endif
 
-    dcc.attach(pinDCCInput);
-    pinMode(pinDCCInput, INPUT);   // Overrides the "pinMode(pinDCCInput, INPUT_PULLUP)" of the AP_DCC_Library as I don't want a pullup on that input
-
-    if (EEPROM.read(CV8ManufacturerIDNumber) == 13)
+    if (EEPROM.read(CV0Check) == 0xE7 && EEPROM.read(CV8ManufacturerIDNumber) == 13)
+    {
+#ifdef DEBUG
+        Serial.println("Loading CVs and Fcts");
+#endif
         loadCVsFromEEPROM();
+        loadFctsFromEEPROM();
+    }
     else
+    {
+#ifdef DEBUG
+        Serial.println("Resetting CVs and Fcts");
+#endif
         resetCVsToDefault();
+        resetFctsToDefault();
+    }
+
+#ifdef DEBUG
+    printCVsCache();
+    printFctsCache();
+#endif
 
     locoCmd.setMyAddress(cvsCache[CV1PrimaryAddress]);
-    updateFctsStateCache();
     updateLightsStateCache();
 }
 
+uint16_t loopHi, loopNr = 0;
+
 void loop()
 {
+#ifdef DEBUG
+    if (loopNr++ == 40000)
+    {
+        loopNr = 0;
+        Serial.print("Loop ");
+        Serial.println(loopHi++);
+    }
+#endif
     // Process DCC commands
     if (dcc.input())
     {
@@ -424,7 +507,7 @@ void loop()
         case Dcc::MyLocoF9F12Cmd:
         case Dcc::MyLocoF13F20Cmd:
         case Dcc::MyLocoF21F28Cmd:
-            updateFctsStateCache();
+            updateFctsCache();
             updateLightsStateCache();
 
 #ifdef DEBUG
@@ -437,7 +520,7 @@ void loop()
                 Serial.print("Rev | ");
 
             Serial.print("F0-F4: ");
-            Serial.print(locoCmd.F0F4);
+            Serial.println(locoCmd.F0F4);
 #endif
             break;
 
