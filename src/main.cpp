@@ -18,8 +18,8 @@ Hardware resources
         * WO4 - PA4 - pin 5
         * WO5 - PA5 - pin 6
     - From megaTinyCore source code
-    #define digitalPinHasPWM(p)  ((p) == PIN_PA4 || (p) == PIN_PB5 || (p) == PIN_PB2 || (p) == PIN_PB1
-                                || (p) == PIN_PB0 || (p) == PIN_PA3)
+        #define digitalPinHasPWM(p)
+            ((p) == PIN_PA4 || (p) == PIN_PA5 || (p) == PIN_PB2 || (p) == PIN_PB1 || (p) == PIN_PB0 || (p) == PIN_PA3)
 - NmraDcc
     - Uses the INT0/1 Hardware Interrupt and micros() ONLY
     - On the attiny1616, millis() and micros() use TCD0
@@ -57,14 +57,15 @@ CV80-84   Light3
 #include <NmraDcc.h>
 
 // Uncomment to send debugging messages to the serial line
-#define DEBUG
+// #define DEBUG
 
 // Hardware pin definitions
-const uint8_t numberOfLights = 4;
-const pin_size_t pinLight[numberOfLights] = {PIN_PB0, PIN_PB1, PIN_PB2, PIN_PA5};
-const pin_size_t pinDCCInput = PIN_PB4;
+const uint8_t numberOfLights = 5;
+const pin_size_t pinLight[numberOfLights] = {PIN_PB0, PIN_PB1, PIN_PB2, PIN_PA5, PIN_PA4};
+const pin_size_t pinDCCInput = PIN_PA2;
 const pin_size_t pinACKOutput = PIN_PA3;
 
+// lightCache[] stores the state (ON/OFF) of lights
 bool lightCache[numberOfLights];
 
 // Objects from NmraDcc
@@ -72,8 +73,8 @@ NmraDcc Dcc;
 
 // Current value of loco speed, direction and speed steps
 uint8_t currentSpeed = 0;
-DCC_DIRECTION currentDirection = DCC_DIR_FWD; // Either DCC_DIR_FWD or DCC_DIR_REV
-DCC_SPEED_STEPS currentSpeedSteps = SPEED_STEP_128;     // Either SPEED_STEP_28 or SPEED_STEP_128
+DCC_DIRECTION currentDirection = DCC_DIR_FWD;       // Either DCC_DIR_FWD or DCC_DIR_REV
+DCC_SPEED_STEPS currentSpeedSteps = SPEED_STEP_128; // Either SPEED_STEP_28 or SPEED_STEP_128
 uint8_t currentFuncState = 0;
 
 // fctsCache[] stores the state (ON/OFF) of functions F0 to F4
@@ -110,12 +111,18 @@ const uint8_t CV80Light3Brightness = 80;
 const uint8_t CV81Light3ControlFunction = 81;
 const uint8_t CV82Light3DirectionSensitivity = 82;
 const uint8_t CV83Light3SpeedSensitivity = 83;
-const uint8_t CV84Light3Effect = 84; // CV with the highest number
+const uint8_t CV84Light3Effect = 84;
+
+const uint8_t CV90Light4Brightness = 90;
+const uint8_t CV91Light4ControlFunction = 91;
+const uint8_t CV92Light4DirectionSensitivity = 92;
+const uint8_t CV93Light4SpeedSensitivity = 93;
+const uint8_t CV94Light4Effect = 94; // CV with the highest number
 
 // cvsCache[] stores the CVs (in RAM, for quickest access)
 // The indexes of the array are the CV numbers
 // cvsCache[cvNumber] = cvValue
-const uint8_t numberOfCvsInCache = CV84Light3Effect + 1; // CV84Light3Effect is the CV with the highest number
+const uint8_t numberOfCvsInCache = CV94Light4Effect + 1; // CV94Light4Effect is the CV with the highest number
 uint8_t cvsCache[numberOfCvsInCache];
 
 // Structure for CV Values Table and default CV Values table as required by NmraDcc for storing default values
@@ -133,7 +140,7 @@ const CVPair FactoryDefaultCVs[] =
         {CV7ManufacturerVersionNumber, 1},
         {CV8ManufacturerIDNumber, 13},
 
-        {CV50Light0Brightness, 255},
+        {CV50Light0Brightness, 150},
         {CV51Light0ControlFunction, 0},
         {CV52Light0DirectionSensitivity, 0},
         {CV53Light0SpeedSensitivity, 0},
@@ -155,7 +162,13 @@ const CVPair FactoryDefaultCVs[] =
         {CV81Light3ControlFunction, 3},
         {CV82Light3DirectionSensitivity, 0},
         {CV83Light3SpeedSensitivity, 0},
-        {CV84Light3Effect, 0}};
+        {CV84Light3Effect, 0},
+
+        {CV90Light4Brightness, 150},
+        {CV91Light4ControlFunction, 4},
+        {CV92Light4DirectionSensitivity, 0},
+        {CV93Light4SpeedSensitivity, 0},
+        {CV94Light4Effect, 0}};
 
 // This callback function is called when a CV Value changes so we can update cvsCache[]
 void notifyCVChange(uint16_t CV, uint8_t Value)
@@ -213,7 +226,8 @@ void updateLightCache()
     for (uint8_t lightNr = 0; lightNr < numberOfLights; lightNr++)
     {
         uint8_t lightNrOffset = lightNr * 10;
-        if(cvsCache[CV51Light0ControlFunction + lightNrOffset] > (numberOfFctsInCache - 1))
+        // Make sure that the function number is not higher than F4
+        if (cvsCache[CV51Light0ControlFunction + lightNrOffset] > (numberOfFctsInCache - 1))
             cvsCache[CV51Light0ControlFunction + lightNrOffset] = 31;
         lightCache[lightNr] =
             (bool)((cvsCache[CV51Light0ControlFunction + lightNrOffset] == 31 || fctsCache[cvsCache[CV51Light0ControlFunction + lightNrOffset]]) &&
