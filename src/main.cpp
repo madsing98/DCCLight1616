@@ -65,6 +65,7 @@ CV80-84   Light3
 const uint8_t numberOfLights = 4;
 const pin_size_t pinLight[numberOfLights] = {PIN_PB0, PIN_PB1, PIN_PB2, PIN_PA5};
 const pin_size_t pinDCCInput = PIN_PB4;
+const pin_size_t pinACKOutput = PIN_PA3;
 
 // Objects from AP_DCC_Library
 extern Dcc dcc;        // This object is instantiated in DCC_Library.cpp
@@ -439,7 +440,7 @@ void cvOperation(const uint8_t op_mode)
 
 void setup()
 {
-    dcc.attach(pinDCCInput);
+    dcc.attach(pinDCCInput, pinACKOutput);
     pinMode(pinDCCInput, INPUT); // Overrides the "pinMode(pinDCCInput, INPUT_PULLUP)" of the AP_DCC_Library as I don't want a pullup on that input
 
     for (uint8_t lightNr = 0; lightNr < numberOfLights; lightNr++)
