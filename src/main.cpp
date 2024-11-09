@@ -23,6 +23,8 @@ Hardware resources
 - AP_DCC_Library
     - TCB0 is used by the library
     - In addition, a free to choose interrupt pin (dccpin) is required for the DCC input signal
+    - TBC: The library selects "sup_isr_Nano_Every.h", which does not make use of the Event system of the CPU,
+      althoug the attiny1616 has one.
 
 CV Map
 CV1     Primary Address
@@ -401,7 +403,7 @@ void setup()
     locoCmd.setMyAddress(cvsCache[CV1PrimaryAddress]);
     updateFctsStateCache();
     updateLightsStateCache();
-    pinMode(pinDCCInput, INPUT);        // Override the pinMode(pinDCCInput, INPUT_PULLUP);  of the DCC library
+    pinMode(pinDCCInput, INPUT);   // Overrides the "pinMode(pinDCCInput, INPUT_PULLUP)" of the AP_DCC_Library as I don't want a pullup on that input
 }
 
 void loop()
