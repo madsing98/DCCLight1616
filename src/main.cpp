@@ -401,6 +401,7 @@ void setup()
     locoCmd.setMyAddress(cvsCache[CV1PrimaryAddress]);
     updateFctsStateCache();
     updateLightsStateCache();
+    pinMode(pinDCCInput, INPUT);        // Override the pinMode(pinDCCInput, INPUT_PULLUP);  of the DCC library
 }
 
 void loop()
