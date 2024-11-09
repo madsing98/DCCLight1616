@@ -141,31 +141,31 @@ const CVPair FactoryDefaultCVs[] =
         {CV8ManufacturerIDNumber, 13},
         {CV29ModeControl, 0},
         
-        {CV50Light0Brightness, 150},
+        {CV50Light0Brightness, 144},
         {CV51Light0ControlFunction, 0},
         {CV52Light0DirectionSensitivity, 0},
         {CV53Light0SpeedSensitivity, 0},
-        {CV54Light0Effect, 1},
+        {CV54Light0Effect, 0},
 
-        {CV60Light1Brightness, 150},
+        {CV60Light1Brightness, 144},
         {CV61Light1ControlFunction, 1},
         {CV62Light1DirectionSensitivity, 0},
         {CV63Light1SpeedSensitivity, 0},
-        {CV64Light1Effect, 2},
+        {CV64Light1Effect, 0},
 
-        {CV70Light2Brightness, 150},
+        {CV70Light2Brightness, 144},
         {CV71Light2ControlFunction, 2},
         {CV72Light2DirectionSensitivity, 0},
         {CV73Light2SpeedSensitivity, 0},
         {CV74Light2Effect, 0},
 
-        {CV80Light3Brightness, 150},
+        {CV80Light3Brightness, 144},
         {CV81Light3ControlFunction, 3},
         {CV82Light3DirectionSensitivity, 0},
         {CV83Light3SpeedSensitivity, 0},
         {CV84Light3Effect, 0},
 
-        {CV90Light4Brightness, 150},
+        {CV90Light4Brightness, 144},
         {CV91Light4ControlFunction, 4},
         {CV92Light4DirectionSensitivity, 0},
         {CV93Light4SpeedSensitivity, 0},
@@ -205,11 +205,11 @@ void readCvsToCache()
         uint16_t cvNr = FactoryDefaultCVs[i].CV;
         cvsCache[cvNr] = Dcc.getCV(cvNr);
 #ifdef DEBUG
-        Serial.print("CV Nr: ");
+        Serial.print("CV");
         Serial.print(cvNr);
-        Serial.print(" = ");
+        Serial.print("=");
         Serial.print(cvsCache[cvNr]);
-        Serial.print(" ");
+        Serial.print("|");
 #endif
     }
 #ifdef DEBUG
@@ -236,9 +236,9 @@ void updateLightCache()
                    (cvsCache[CV53Light0SpeedSensitivity + lightNrOffset] == 0 || (cvsCache[CV53Light0SpeedSensitivity + lightNrOffset] == 1 && currentSpeed > 1)));
 #ifdef DEBUG
         Serial.print(lightNr);
-        Serial.print(" = ");
+        Serial.print("=");
         Serial.print(lightCache[lightNr]);
-        Serial.print(" | ");
+        Serial.print("|");
 #endif
     }
 #ifdef DEBUG
@@ -252,11 +252,11 @@ void notifyDccSpeed(uint16_t Addr, DCC_ADDR_TYPE AddrType, uint8_t Speed, DCC_DI
     if (currentDirection != Dir || currentSpeed != Speed || currentSpeedSteps != SpeedSteps)
     {
 #ifdef DEBUG
-        Serial.print("notifyDccSpeed: Speed = ");
+        Serial.print("notifyDccSpeed: Speed=");
         Serial.print(Speed, DEC);
-        Serial.print(" | Steps = ");
+        Serial.print("|Steps=");
         Serial.print(SpeedSteps, DEC);
-        Serial.print(" | Dir = ");
+        Serial.print("|Dir=");
         Serial.println((Dir == DCC_DIR_FWD) ? "Fwd" : "Rev");
 #endif
 
@@ -275,7 +275,7 @@ void notifyDccFunc(uint16_t Addr, DCC_ADDR_TYPE AddrType, FN_GROUP FuncGrp, uint
 #ifdef DEBUG
         Serial.print("Function Group: ");
         Serial.print(FuncGrp);
-        Serial.print(" | State = 0b");
+        Serial.print("|State = 0b");
         Serial.println(FuncState, BIN);
 #endif
         currentFuncState = FuncState;
@@ -365,6 +365,16 @@ void notifyCVAck(void)
 
 void setup()
 {
+    // Set light pins and DCC ACK pin to outputs
+    for (uint8_t lightNr = 0; lightNr < numberOfLights; lightNr++)
+        {
+        analogWrite(pinLight[lightNr],0);
+        pinMode(pinLight[lightNr], OUTPUT);
+        }
+
+    digitalWrite(pinACKOutput, 0);
+    pinMode(pinACKOutput, OUTPUT);
+
 #ifdef DEBUG
     // Serial TX used for debugging messages
     // Two mapping options for Serial are PB2, PB3, PB1, PB0 (default) and PA1, PA2, PA3, PA4 for TX, RX, XCK, XDIR.
@@ -383,13 +393,7 @@ void setup()
     Dcc.init(MAN_ID_DIY, 10, FLAGS_MY_ADDRESS_ONLY | FLAGS_AUTO_FACTORY_DEFAULT, 0);
 
     // Uncomment to force CV Reset to Factory Defaults
-    notifyCVResetFactoryDefault();
-
-    // Set light pins and DCC ACK pin to outputs
-    for (uint8_t lightNr = 0; lightNr < numberOfLights; lightNr++)
-        pinMode(pinLight[lightNr], OUTPUT);
-
-    pinMode(pinACKOutput, OUTPUT);
+    //notifyCVResetFactoryDefault();
 
     readCvsToCache();
     updateLightCache();
@@ -407,8 +411,7 @@ void loop()
     {
         loopCounterLow = 0;
         Serial.print("loop ");
-        //Serial.println(loopCounterHigh);
-        Serial.println(micros());
+        Serial.println(loopCounterHigh);
         loopCounterHigh++;
     }
     loopCounterLow++;
