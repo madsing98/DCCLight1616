@@ -56,7 +56,7 @@ CV80-84   Light3
 #include <EEPROM.h>
 
 // Uncomment to send debugging messages to the serial line
-//#define DEBUG
+#define DEBUG
 
 // Hardware pin definitions
 const uint8_t numberOfLights = 4;
@@ -390,10 +390,11 @@ void setup()
     Serial.swap();          // Use the second set of serial pins. TX is on PA1
     Serial.begin(115200);
     delay(100);
-    Serial.println("Test AP_DCC_library - Loco commands");
+    Serial.println("-- Tiny DCC Decoder --");
 #endif
 
     dcc.attach(pinDCCInput);
+    pinMode(pinDCCInput, INPUT);   // Overrides the "pinMode(pinDCCInput, INPUT_PULLUP)" of the AP_DCC_Library as I don't want a pullup on that input
 
     if (EEPROM.read(CV8ManufacturerIDNumber) == 13)
         loadCVsFromEEPROM();
@@ -403,7 +404,6 @@ void setup()
     locoCmd.setMyAddress(cvsCache[CV1PrimaryAddress]);
     updateFctsStateCache();
     updateLightsStateCache();
-    pinMode(pinDCCInput, INPUT);   // Overrides the "pinMode(pinDCCInput, INPUT_PULLUP)" of the AP_DCC_Library as I don't want a pullup on that input
 }
 
 void loop()
@@ -413,12 +413,11 @@ void loop()
     {
         switch (dcc.cmdType)
         {
-        case Dcc::ResetCmd:
 #ifdef DEBUG
-            Serial.println("Reset command (all engines stop)");
-#endif
+        case Dcc::ResetCmd:
+            Serial.println("Reset cmd (all engines stop)");
             break;
-
+#endif
         case Dcc::MyLocoSpeedCmd:
         case Dcc::MyLocoF0F4Cmd:
         case Dcc::MyLocoF5F8Cmd:
@@ -429,47 +428,35 @@ void loop()
             updateLightsStateCache();
 
 #ifdef DEBUG
-            Serial.print("Loco speed: ");
+            Serial.print("Speed: ");
             Serial.print(locoCmd.speed);
-            Serial.print(" | Direction: ");
+            Serial.print(" | Dir: ");
             if (locoCmd.forward)
-                Serial.print("Forward | ");
+                Serial.print("Fwd | ");
             else
-                Serial.print("Reverse | ");
+                Serial.print("Rev | ");
 
             Serial.print("F0-F4: ");
             Serial.print(locoCmd.F0F4);
-
-            Serial.print(" | F5-F8: ");
-            Serial.print(locoCmd.F5F8);
-
-            Serial.print(" | F9-F12: ");
-            Serial.print(locoCmd.F9F12);
-
-            Serial.print(" | F13-F20: ");
-            Serial.print(locoCmd.F13F20);
-
-            Serial.print(" | F21-F28: ");
-            Serial.println(locoCmd.F21F28);
 #endif
             break;
 
-        case Dcc::MyEmergencyStopCmd:
 #ifdef DEBUG
-            Serial.println("Emergency stop command for this loco");
-#endif
+        case Dcc::MyEmergencyStopCmd:
+            Serial.println("Emergency stop");
             break;
+#endif
 
         case Dcc::MyPomCmd:
 #ifdef DEBUG
-            Serial.println("Programming on Main command:");
+            Serial.println("PoM cmd:");
 #endif
             cvOperation(OPModeProgramOnMain);
             break;
 
         case Dcc::SmCmd:
 #ifdef DEBUG
-            Serial.println("Service mode command:");
+            Serial.println("SM cmd:");
 #endif
             cvOperation(OPModeServiceMode);
             break;
