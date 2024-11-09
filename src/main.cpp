@@ -62,16 +62,17 @@ CV90-94   Light4
 #include <EEPROM.h>
 
 // Uncomment to send debugging messages to the serial line
-#define DEBUG
+// #define DEBUG
 
 // Versioning
 const uint8_t versionIdMajor = 1;
-const uint8_t versionIdMinor = 2;
+const uint8_t versionIdMinor = 3;
 const uint8_t versionId = versionIdMajor << 4 | versionIdMinor;
 
 // Hardware pin definitions
 const uint8_t numberOfLights = 5;
-const pin_size_t pinLight[numberOfLights] = {PIN_PB0, PIN_PB1, PIN_PB2, PIN_PA5, PIN_PA4};
+const pin_size_t pinLight[numberOfLights] = {PIN_PB1, PIN_PB0, PIN_PA5, PIN_PB2, PIN_PA4};
+//                      Light # on the PCB      0        1        2        3        4
 const pin_size_t pinDCCInput = PIN_PA2;
 const pin_size_t pinACKOutput = PIN_PA3;
 
@@ -151,7 +152,7 @@ const CVPair FactoryDefaultCVs[] =
         {CV7ManufacturerVersionNumber, 1},
         {CV8ManufacturerIDNumber, 13},
         {CV29ModeControl, 0},
-        
+
         {CV50Light0Brightness, 144},
         {CV51Light0ControlFunction, 0},
         {CV52Light0DirectionSensitivity, 0},
@@ -302,12 +303,6 @@ void notifyDccFunc(uint16_t Addr, DCC_ADDR_TYPE AddrType, FN_GROUP FuncGrp, uint
     }
 }
 
-// void resetFctsToDefault()
-// {
-//     for (uint8_t i = 0; i < numberOfFctsInCache; i++)
-//         fctsCache[i] = 0;
-// }
-
 void readFctsToCache()
 {
     uint8_t FuncState = EEPROM.read(fctsEepromAddress);
@@ -392,10 +387,10 @@ void setup()
 {
     // Set light pins and DCC ACK pin to outputs
     for (uint8_t lightNr = 0; lightNr < numberOfLights; lightNr++)
-        {
-        analogWrite(pinLight[lightNr],0);
+    {
+        analogWrite(pinLight[lightNr], 0);
         pinMode(pinLight[lightNr], OUTPUT);
-        }
+    }
 
     digitalWrite(pinACKOutput, 0);
     pinMode(pinACKOutput, OUTPUT);
@@ -409,7 +404,6 @@ void setup()
     Serial.println("-- Starting tiny DCC decoder --");
 #endif
 
-    //resetFctsToDefault();
     readFctsToCache();
 
     // Initialize the NmraDcc library
@@ -418,22 +412,24 @@ void setup()
     Dcc.pin(pinDCCInput, false);
     Dcc.init(MAN_ID_DIY, versionId, FLAGS_MY_ADDRESS_ONLY | FLAGS_AUTO_FACTORY_DEFAULT, 0);
 
-    // Uncomment to force CV Reset to Factory Defaults
-    //notifyCVResetFactoryDefault();
+    // Commented out as not necessary with Attiny
+    // notifyCVResetFactoryDefault() is automatically called
+    // at very first call (i.e. unprogrammed EEPROM) of NmraDcc::init() with FLAGS_AUTO_FACTORY_DEFAULT set
+    // notifyCVResetFactoryDefault();
 
     readCvsToCache();
     updateLightCache();
 }
 
 #ifdef DEBUG
-    uint16_t loopCounterLow = 20000;
-    uint16_t loopCounterHigh = 0;
+uint16_t loopCounterLow = 20000;
+uint16_t loopCounterHigh = 0;
 #endif
 
 void loop()
 {
 #ifdef DEBUG
-    if(loopCounterLow == 20000)
+    if (loopCounterLow == 20000)
     {
         loopCounterLow = 0;
         Serial.print("loop ");
