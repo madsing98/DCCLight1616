@@ -399,6 +399,8 @@ void setup()
         resetCVsToDefault();
 
     locoCmd.setMyAddress(cvsCache[CV1PrimaryAddress]);
+    updateFctsStateCache();
+    updateLightsStateCache();
 }
 
 void loop()
