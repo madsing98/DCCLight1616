@@ -57,7 +57,7 @@ CV80-84   Light3
 #include <NmraDcc.h>
 
 // Uncomment to send debugging messages to the serial line
-// #define DEBUG
+#define DEBUG
 
 // Hardware pin definitions
 const uint8_t numberOfLights = 5;
@@ -139,7 +139,8 @@ const CVPair FactoryDefaultCVs[] =
         {CV1PrimaryAddress, 3},
         {CV7ManufacturerVersionNumber, 1},
         {CV8ManufacturerIDNumber, 13},
-
+        {CV29ModeControl, 0},
+        
         {CV50Light0Brightness, 150},
         {CV51Light0ControlFunction, 0},
         {CV52Light0DirectionSensitivity, 0},
@@ -382,7 +383,7 @@ void setup()
     Dcc.init(MAN_ID_DIY, 10, FLAGS_MY_ADDRESS_ONLY | FLAGS_AUTO_FACTORY_DEFAULT, 0);
 
     // Uncomment to force CV Reset to Factory Defaults
-    // notifyCVResetFactoryDefault();
+    notifyCVResetFactoryDefault();
 
     // Set light pins and DCC ACK pin to outputs
     for (uint8_t lightNr = 0; lightNr < numberOfLights; lightNr++)
@@ -394,8 +395,25 @@ void setup()
     updateLightCache();
 }
 
+#ifdef DEBUG
+    uint16_t loopCounterLow = 20000;
+    uint16_t loopCounterHigh = 0;
+#endif
+
 void loop()
 {
+#ifdef DEBUG
+    if(loopCounterLow == 20000)
+    {
+        loopCounterLow = 0;
+        Serial.print("loop ");
+        //Serial.println(loopCounterHigh);
+        Serial.println(micros());
+        loopCounterHigh++;
+    }
+    loopCounterLow++;
+#endif
+
     // Process DCC packets
     Dcc.process();
 
